@@ -1,13 +1,9 @@
-import {
-    StyleSheet,
-    Text,
-    View,
-    TextInput,
-    Pressable,
-    FlatList,
-} from "react-native";
-import { useState } from "react";
-import Icons from "react-native-vector-icons/FontAwesome";
+import { StyleSheet, Text, View } from "react-native";
+import { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import AddTaskComponent from "./AddTaskComponent";
+import FilterTasksComponent from "./FilterTasksComponent";
+import ListTasksComponent from "./ListTasksComponent";
 
 export default function Home({ navigation }) {
     const tasksArray = [
@@ -22,13 +18,13 @@ export default function Home({ navigation }) {
             title: "Workout",
             details:
                 "Complete a 30-minute cardio and strength training session.",
-            completed: false,
+            completed: true,
         },
         {
             id: 3,
             title: "Meeting with Team",
             details: "Discuss project updates and upcoming deadlines.",
-            completed: false,
+            completed: true,
         },
         {
             id: 4,
@@ -44,68 +40,98 @@ export default function Home({ navigation }) {
             completed: false,
         },
     ];
-    const [tasks, setTasks] = useState(tasksArray);
+    const [tasks, setTasks] = useState([]);
+    const [filter, setFilter] = useState("all");
+    const [taskTitle, setTaskTitle] = useState("");
+    const [taskDetails, setTaskDetails] = useState("");
+
+    useEffect(() => {
+        const loadTasks = async function () {
+            try {
+                const storedTasks = await AsyncStorage.getItem("tasks");
+                if (storedTasks != null) {
+                    setTasks(JSON.parse(storedTasks));
+                } else {
+                    setTasks(tasksArray);
+                }
+            } catch (error) {
+                console.error("Error Loading Tasks from AsyncStorage:", error);
+            }
+        };
+        loadTasks();
+    }, []);
+
+    useEffect(() => {
+        const saveTasks = async function () {
+            try {
+                await AsyncStorage.setItem("tasks", JSON.stringify(tasks));
+            } catch (error) {
+                console.error("Error Saving Tasks to AsyncStorage:", error);
+            }
+        };
+        saveTasks();
+    }, [tasks]);
+
+    const addTask = function () {
+        if (!taskTitle.trim()) return;
+        const newTask = {
+            id: Date.now(),
+            title: taskTitle.trim(),
+            details: taskDetails.trim(),
+            completed: false,
+        };
+        setTasks([...tasks, newTask]);
+        setTaskTitle("");
+        setTaskDetails("");
+    };
+
+    const filterTasks = tasks.filter((task) => {
+        if (filter == "completed") return task.completed;
+        if (filter == "uncompleted") return !task.completed;
+        return true;
+    });
+
+    const deleteTask = function (taskID) {
+        const updatedTasks = tasks.filter((task) => task.id != taskID);
+        setTasks(updatedTasks);
+    };
+
+    const toggleTaskCompletion = function (taskID) {
+        const updatedTasks = tasks.map((task) => {
+            if (task.id == taskID) {
+                return { ...task, completed: !task.completed };
+            }
+            return task;
+        });
+        setTasks(updatedTasks);
+    };
+
+    const updateTask = function (updatedTask) {
+        const updatedTasks = tasks.map((task) =>
+            task.id === updatedTask.id ? updatedTask : task
+        );
+        setTasks(updatedTasks);
+    };
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>👋🏻 Hello There!</Text>
-            <View style={styles.inputsContainer}>
-                <TextInput style={styles.input} placeholder="Enter Task Name" />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Task Details"
-                />
-            </View>
-            <Pressable style={styles.submitButton}>
-                <Text style={styles.submitButtonText}>Add Task</Text>
-            </Pressable>
+            <AddTaskComponent
+                taskTitle={taskTitle}
+                setTaskTitle={setTaskTitle}
+                taskDetails={taskDetails}
+                setTaskDetails={setTaskDetails}
+                addTask={addTask}
+            />
             <View style={styles.separator} />
-            <View style={styles.filterButtonsContainer}>
-                <Pressable
-                    style={[styles.filterButton, styles.activeFilterButton]}
-                >
-                    <Text
-                        style={[
-                            styles.filterButtonText,
-                            styles.activeFilterButtonText,
-                        ]}
-                    >
-                        All
-                    </Text>
-                </Pressable>
-                <Pressable style={styles.filterButton}>
-                    <Text style={styles.filterButtonText}>Completed</Text>
-                </Pressable>
-                <Pressable style={styles.filterButton}>
-                    <Text style={styles.filterButtonText}>Uncompleted</Text>
-                </Pressable>
-            </View>
-            <View style={styles.tasksListView}>
-                <FlatList
-                    data={tasks}
-                    renderItem={({ item }) => (
-                        <Pressable
-                            style={styles.taskItem}
-                            onPress={() =>
-                                navigation.navigate("TaskDetails", {
-                                    task: item,
-                                })
-                            }
-                        >
-                            <Text style={styles.taskTitle}>{item.title}</Text>
-                            <View style={styles.buttonsContainer}>
-                                <Icons
-                                    name="check-square"
-                                    style={styles.taskIcons}
-                                />
-                                <Icons name="trash" style={styles.taskIcons} />
-                            </View>
-                        </Pressable>
-                    )}
-                    keyExtractor={(item) => item.id.toString()}
-                    style={styles.tasksList}
-                />
-            </View>
+            <FilterTasksComponent filter={filter} setFilter={setFilter} />
+            <ListTasksComponent
+                filterTasks={filterTasks}
+                navigation={navigation}
+                updateTask={updateTask}
+                toggleTaskCompletion={toggleTaskCompletion}
+                deleteTask={deleteTask}
+            />
         </View>
     );
 }
@@ -118,91 +144,12 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     title: {
-        fontSize: 25,
-    },
-    inputsContainer: {
-        margin: 10,
-        width: "100%",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    input: {
-        fontSize: 15,
-        height: 50,
-        borderWidth: 1,
-        borderColor: "grey",
-        color: "grey",
-        padding: 10,
-        borderRadius: 5,
-        width: "90%",
-        margin: 5,
-    },
-    submitButton: {
-        backgroundColor: "black",
-        padding: 10,
-        borderRadius: 5,
-    },
-    submitButtonText: {
-        color: "white",
-        fontSize: 15,
+        fontSize: 24,
     },
     separator: {
         height: 1,
         backgroundColor: "grey",
         marginVertical: 10,
         width: "90%",
-    },
-    filterButtonsContainer: {
-        flexDirection: "row",
-        width: "90%",
-    },
-    filterButton: {
-        flex: 1,
-        borderColor: "black",
-        borderWidth: 1,
-        padding: 10,
-        borderRadius: 5,
-        marginHorizontal: 5,
-    },
-    activeFilterButton: {
-        backgroundColor: "black",
-    },
-    filterButtonText: {
-        fontSize: 15,
-        textAlign: "center",
-    },
-    activeFilterButtonText: {
-        color: "white",
-    },
-    taskTitle: {
-        fontSize: 15,
-        alignSelf: "center",
-    },
-    tasksListView: {
-        width: "100%",
-        alignContent: "center",
-    },
-    tasksList: {
-        width: "100%",
-        alignContent: "center",
-        marginVertical: 10,
-    },
-    taskItem: {
-        width: "90%",
-        padding: 10,
-        borderWidth: 1,
-        borderColor: "black",
-        justifyContent: "space-between",
-        flexDirection: "row",
-        alignSelf: "center",
-        marginBlockEnd: 5,
-        borderRadius: 5,
-    },
-    taskIcons: {
-        fontSize: 25,
-    },
-    buttonsContainer: {
-        flexDirection: "row",
-        gap: 10,
     },
 });
